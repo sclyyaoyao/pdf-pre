@@ -20,7 +20,16 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer(async (req, res) => {
-  const { pathname } = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  let pathname = null;
+  try {
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    pathname = url.pathname;
+  } catch (error) {
+    console.error('无法解析请求 URL', error);
+    res.writeHead(400, { 'Content-Type': 'application/json', ...defaultCorsHeaders() });
+    res.end(JSON.stringify({ error: 'Invalid request URL' }));
+    return;
+  }
   try {
     if (req.method === 'GET') {
       await handleGet(req, res, pathname);
@@ -69,7 +78,7 @@ async function handleGet(req, res, pathname) {
   const targetPath = pathname === '/' ? 'index.html' : pathname;
   let filePath = path.join(PUBLIC_DIR, targetPath);
   if (!filePath.startsWith(PUBLIC_DIR)) {
-    res.writeHead(403, { 'Content-Type': 'application/json' });
+    res.writeHead(403, { 'Content-Type': 'application/json', ...defaultCorsHeaders() });
     res.end(JSON.stringify({ error: 'Forbidden' }));
     return;
   }
@@ -94,7 +103,7 @@ async function handleGet(req, res, pathname) {
         console.error(innerError);
       }
     }
-    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.writeHead(404, { 'Content-Type': 'application/json', ...defaultCorsHeaders() });
     res.end(JSON.stringify({ error: 'File not found' }));
   }
 }
