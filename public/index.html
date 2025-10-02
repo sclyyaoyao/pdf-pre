@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDF 转换器</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header>
+        <h1>PDF 文本转换</h1>
+        <p class="lead">
+          上传一个 PDF 文件，选择想要的格式，系统会即时帮你转换成 TXT、Markdown 或 CSV。
+        </p>
+      </header>
+      <form id="convert-form" class="panel">
+        <div class="field">
+          <label for="file">选择 PDF 文件</label>
+          <input type="file" id="file" name="file" accept="application/pdf" required />
+          <p class="hint">单次仅支持一个文件，大小上限 20MB。</p>
+        </div>
+
+        <fieldset class="field">
+          <legend>输出格式</legend>
+          <label><input type="radio" name="format" value="txt" checked /> 纯文本 (.txt)</label>
+          <label><input type="radio" name="format" value="md" /> Markdown (.md)</label>
+          <label><input type="radio" name="format" value="csv" /> CSV (.csv)</label>
+        </fieldset>
+
+        <div class="field checkbox">
+          <label>
+            <input type="checkbox" name="normalizeLineBreaks" value="true" />
+            去掉多余换行（适合段落被硬回车切开的文档）
+          </label>
+        </div>
+
+        <button type="submit" class="primary" id="submit-btn">开始转换</button>
+      </form>
+
+      <section id="status" class="status" hidden>
+        <p id="status-message"></p>
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

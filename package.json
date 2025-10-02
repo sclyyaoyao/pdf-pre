@@ -1,0 +1,11 @@
+{
+  "name": "pdf-pre",
+  "version": "1.0.0",
+  "description": "PDF conversion web app with lightweight Node backend",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "test": "node tests/run-tests.js"
+  }
+}
