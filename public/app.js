@@ -2,8 +2,10 @@ const form = document.getElementById('convert-form');
 const statusSection = document.getElementById('status');
 const statusMessage = document.getElementById('status-message');
 const submitButton = document.getElementById('submit-btn');
+const cancelButton = document.getElementById('cancel-btn');
 
 const MAX_SIZE = 20 * 1024 * 1024; // 20MB
+let currentController = null;
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -26,11 +28,19 @@ form.addEventListener('submit', async (event) => {
   const formData = new FormData(form);
   showStatus('正在转换，请稍候…', false, true);
   toggleSubmit(true);
+  toggleCancel(true);
+
+  if (currentController) {
+    currentController.abort();
+  }
+  const controller = new AbortController();
+  currentController = controller;
 
   try {
     const response = await fetch('/api/convert', {
       method: 'POST',
       body: formData,
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -44,10 +54,25 @@ form.addEventListener('submit', async (event) => {
     triggerDownload(blob, filename);
     showStatus(`转换完成！文件已下载为 ${filename}。`, false);
   } catch (error) {
-    showStatus(error.message, true);
+    if (error.name === 'AbortError') {
+      showStatus('已取消转换。', false);
+    } else {
+      showStatus(error.message, true);
+    }
   } finally {
     toggleSubmit(false);
+    toggleCancel(false);
+    currentController = null;
   }
+});
+
+cancelButton.addEventListener('click', () => {
+  if (!currentController) {
+    return;
+  }
+  cancelButton.disabled = true;
+  showStatus('正在取消，请稍候…', false, true);
+  currentController.abort();
 });
 
 function showStatus(message, isError = false, isLoading = false) {
@@ -64,6 +89,11 @@ function showStatus(message, isError = false, isLoading = false) {
 function toggleSubmit(disabled) {
   submitButton.disabled = disabled;
   submitButton.textContent = disabled ? '处理中…' : '开始转换';
+}
+
+function toggleCancel(visible) {
+  cancelButton.hidden = !visible;
+  cancelButton.disabled = !visible;
 }
 
 function buildDownloadName(original, format) {

@@ -20,26 +20,44 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer(async (req, res) => {
+  const { pathname } = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   try {
     if (req.method === 'GET') {
-      await handleGet(req, res);
+      await handleGet(req, res, pathname);
       return;
     }
-    if (req.method === 'POST' && req.url === '/api/convert') {
+    if (req.method === 'POST' && isConvertPath(pathname)) {
       await handleConvert(req, res);
       return;
     }
-    if (req.method === 'OPTIONS' && req.url === '/api/convert') {
+    if (req.method === 'OPTIONS' && isConvertPath(pathname)) {
       res.writeHead(204, defaultCorsHeaders());
       res.end();
       return;
     }
-    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.writeHead(404, { 'Content-Type': 'application/json', ...defaultCorsHeaders() });
     res.end(JSON.stringify({ error: 'Not found' }));
   } catch (error) {
     console.error(error);
-    res.writeHead(500, { 'Content-Type': 'application/json' });
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'application/json', ...defaultCorsHeaders() });
+    }
     res.end(JSON.stringify({ error: 'Internal server error' }));
+  }
+});
+
+server.on('clientError', (error, socket) => {
+  console.error('Client error', error);
+  if (socket.writable) {
+    const body = JSON.stringify({ error: 'Malformed request' });
+    socket.end(
+      `HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ${Buffer.byteLength(
+        body,
+        'utf-8',
+      )}\r\nConnection: close\r\n\r\n${body}`,
+    );
+  } else {
+    socket.destroy();
   }
 });
 
@@ -47,9 +65,9 @@ server.listen(PORT, () => {
   console.log(`Server listening on http://localhost:${PORT}`);
 });
 
-async function handleGet(req, res) {
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  let filePath = path.join(PUBLIC_DIR, url.pathname === '/' ? 'index.html' : url.pathname);
+async function handleGet(req, res, pathname) {
+  const targetPath = pathname === '/' ? 'index.html' : pathname;
+  let filePath = path.join(PUBLIC_DIR, targetPath);
   if (!filePath.startsWith(PUBLIC_DIR)) {
     res.writeHead(403, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Forbidden' }));
@@ -136,4 +154,13 @@ function defaultCorsHeaders() {
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   };
+}
+
+function isConvertPath(pathname) {
+  if (!pathname) return false;
+  if (pathname === '/api/convert') return true;
+  if (pathname.endsWith('/')) {
+    return pathname.slice(0, -1) === '/api/convert';
+  }
+  return false;
 }

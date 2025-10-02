@@ -72,6 +72,28 @@ test('parseMultipartRequest 可解析 multipart 请求并支持 octet-stream', a
   assert.equal(Buffer.compare(file.buffer, pdfBuffer), 0);
 });
 
+test('parseMultipartRequest 支持带引号的 boundary', async () => {
+  const boundary = '----quotedBoundary5d6c';
+  const pdfPath = path.join(__dirname, 'fixtures', 'simple.pdf');
+  const pdfBuffer = await readFile(pdfPath);
+
+  const parts = [
+    Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="simple.pdf"\r\nContent-Type: application/pdf\r\n\r\n`, 'utf-8'),
+    pdfBuffer,
+    Buffer.from(`\r\n--${boundary}--\r\n`, 'utf-8'),
+  ];
+
+  const body = Buffer.concat(parts);
+  const req = Readable.from(body);
+  req.headers = {
+    'content-type': `multipart/form-data; boundary="${boundary}"`,
+  };
+
+  const { file } = await parseMultipartRequest(req);
+  assert.equal(file.size, pdfBuffer.length);
+  assert.equal(file.originalName, 'simple.pdf');
+});
+
 let passed = 0;
 for (const { name, fn } of tests) {
   try {

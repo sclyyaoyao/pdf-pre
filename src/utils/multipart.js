@@ -11,7 +11,10 @@ export async function parseMultipartRequest(req, options = {}) {
   if (!boundaryMatch) {
     throw new Error('Missing multipart boundary');
   }
-  const boundary = boundaryMatch[1];
+  let boundary = boundaryMatch[1].trim();
+  if (boundary.startsWith('"') && boundary.endsWith('"')) {
+    boundary = boundary.slice(1, -1);
+  }
   const boundaryBuffer = Buffer.from(`--${boundary}`);
   const maxSize = options.maxFileSize || MAX_UPLOAD_SIZE;
 
@@ -20,6 +23,9 @@ export async function parseMultipartRequest(req, options = {}) {
   let file = null;
 
   let cursor = bodyBuffer.indexOf(boundaryBuffer);
+  if (cursor === -1) {
+    throw new Error('Malformed multipart payload');
+  }
   while (cursor !== -1) {
     cursor += boundaryBuffer.length;
 
@@ -134,6 +140,13 @@ function collectBody(req, maxSize) {
         return;
       }
       resolve(Buffer.concat(chunks));
+    });
+    req.on('aborted', () => {
+      if (aborted) {
+        return;
+      }
+      aborted = true;
+      reject(new Error('Request aborted'));
     });
     req.on('error', (error) => {
       if (aborted) {

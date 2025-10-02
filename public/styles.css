@@ -72,6 +72,13 @@ header h1 {
   gap: 0.5rem;
 }
 
+.actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .primary {
   padding: 0.9rem 1.4rem;
   border: none;
@@ -95,6 +102,23 @@ header h1 {
   box-shadow: 0 12px 30px rgba(37, 99, 235, 0.3);
 }
 
+.secondary {
+  padding: 0.85rem 1.2rem;
+  border-radius: 999px;
+  border: 1px solid #cbd2d9;
+  background: #fff;
+  color: #334155;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.secondary:hover {
+  background: #f1f5f9;
+  color: #1f2937;
+  box-shadow: 0 8px 20px rgba(148, 163, 184, 0.25);
+}
+
 .hint {
   margin: 0.5rem 0 0;
   color: #829ab1;
@@ -114,6 +138,31 @@ header h1 {
 .status.error {
   background: #fee2e2;
   color: #b91c1c;
+}
+
+.status.loading {
+  position: relative;
+  padding-left: 3rem;
+}
+
+.status.loading::before {
+  content: '';
+  position: absolute;
+  left: 1.2rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  border: 3px solid rgba(37, 99, 235, 0.3);
+  border-top-color: #2563eb;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: translateY(-50%) rotate(360deg);
+  }
 }
 
 @media (max-width: 600px) {
