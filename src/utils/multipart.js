@@ -1,5 +1,7 @@
 const MAX_UPLOAD_SIZE = 20 * 1024 * 1024; // 20 MB
 
+const DOUBLE_CRLF = Buffer.from('\r\n\r\n');
+
 export async function parseMultipartRequest(req, options = {}) {
   const contentType = req.headers['content-type'] || '';
   if (!contentType.startsWith('multipart/form-data')) {
@@ -9,42 +11,79 @@ export async function parseMultipartRequest(req, options = {}) {
   if (!boundaryMatch) {
     throw new Error('Missing multipart boundary');
   }
-  const boundary = `--${boundaryMatch[1]}`;
+  const boundary = boundaryMatch[1];
+  const boundaryBuffer = Buffer.from(`--${boundary}`);
   const maxSize = options.maxFileSize || MAX_UPLOAD_SIZE;
 
-  const buffer = await collectBody(req, maxSize);
-  const parts = buffer.toString('latin1').split(boundary).slice(1, -1);
+  const bodyBuffer = await collectBody(req, maxSize);
   const fields = {};
   let file = null;
 
-  for (const part of parts) {
-    const trimmed = part.trim();
-    if (!trimmed) continue;
-    const [rawHeaders, ...rest] = trimmed.split('\r\n\r\n');
-    const bodyString = rest.join('\r\n\r\n');
-    const headers = parseHeaders(rawHeaders);
-    const disposition = headers['content-disposition'];
-    if (!disposition) {
+  let cursor = bodyBuffer.indexOf(boundaryBuffer);
+  while (cursor !== -1) {
+    cursor += boundaryBuffer.length;
+
+    // 检查是否已经到达结束边界
+    if (bodyBuffer[cursor] === 0x2d && bodyBuffer[cursor + 1] === 0x2d) {
+      break;
+    }
+
+    // 跳过换行
+    if (bodyBuffer[cursor] === 0x0d && bodyBuffer[cursor + 1] === 0x0a) {
+      cursor += 2;
+    } else if (bodyBuffer[cursor] === 0x0a) {
+      cursor += 1;
+    }
+
+    const nextBoundaryIndex = bodyBuffer.indexOf(boundaryBuffer, cursor);
+    if (nextBoundaryIndex === -1) {
+      break;
+    }
+
+    let partBuffer = bodyBuffer.slice(cursor, nextBoundaryIndex);
+    partBuffer = stripTrailingLineBreak(partBuffer);
+
+    const headersEndIndex = partBuffer.indexOf(DOUBLE_CRLF);
+    if (headersEndIndex === -1) {
+      cursor = nextBoundaryIndex;
       continue;
     }
+
+    const rawHeaders = partBuffer.slice(0, headersEndIndex).toString('utf-8');
+    const headers = parseHeaders(rawHeaders);
+    const content = partBuffer.slice(headersEndIndex + DOUBLE_CRLF.length);
+    const disposition = headers['content-disposition'];
+
+    if (!disposition) {
+      cursor = nextBoundaryIndex;
+      continue;
+    }
+
     const nameMatch = disposition.match(/name="([^"]+)"/i);
     if (!nameMatch) {
+      cursor = nextBoundaryIndex;
       continue;
     }
+
     const fieldName = nameMatch[1];
     const filenameMatch = disposition.match(/filename="([^"]*)"/i);
-    const dataBuffer = Buffer.from(bodyString.replace(/\r\n$/, ''), 'latin1');
+
     if (filenameMatch && filenameMatch[1]) {
+      const originalName = filenameMatch[1];
+      const fileBuffer = content;
+      const mimeType = headers['content-type'] || 'application/octet-stream';
       file = {
         fieldName,
-        originalName: filenameMatch[1],
-        mimeType: headers['content-type'] || 'application/octet-stream',
-        buffer: dataBuffer,
-        size: dataBuffer.length,
+        originalName,
+        mimeType,
+        buffer: fileBuffer,
+        size: fileBuffer.length,
       };
     } else {
-      fields[fieldName] = bodyString.replace(/\r\n$/, '').trim();
+      fields[fieldName] = stripTrailingLineBreak(content).toString('utf-8');
     }
+
+    cursor = nextBoundaryIndex;
   }
 
   if (!file) {
@@ -56,7 +95,11 @@ export async function parseMultipartRequest(req, options = {}) {
   if (!file.originalName.toLowerCase().endsWith('.pdf')) {
     throw new Error('Only PDF files are allowed');
   }
-  if (file.mimeType && !file.mimeType.toLowerCase().includes('pdf')) {
+  if (
+    file.mimeType &&
+    !/pdf/i.test(file.mimeType) &&
+    file.mimeType.toLowerCase() !== 'application/octet-stream'
+  ) {
     throw new Error('Invalid file type');
   }
 
@@ -67,20 +110,49 @@ function collectBody(req, maxSize) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
-    req.on('data', (chunk) => {
+    let aborted = false;
+
+    const onData = (chunk) => {
+      if (aborted) {
+        return;
+      }
       size += chunk.length;
       if (size > maxSize) {
+        aborted = true;
+        chunks.length = 0;
         reject(new Error('File too large'));
-        req.destroy();
+        req.removeListener('data', onData);
+        req.resume();
         return;
       }
       chunks.push(chunk);
-    });
+    };
+
+    req.on('data', onData);
     req.on('end', () => {
+      if (aborted) {
+        return;
+      }
       resolve(Buffer.concat(chunks));
     });
-    req.on('error', (error) => reject(error));
+    req.on('error', (error) => {
+      if (aborted) {
+        return;
+      }
+      aborted = true;
+      reject(error);
+    });
   });
+}
+
+function stripTrailingLineBreak(buffer) {
+  if (buffer.length >= 2 && buffer[buffer.length - 2] === 0x0d && buffer[buffer.length - 1] === 0x0a) {
+    return buffer.slice(0, buffer.length - 2);
+  }
+  if (buffer.length >= 1 && (buffer[buffer.length - 1] === 0x0a || buffer[buffer.length - 1] === 0x0d)) {
+    return buffer.slice(0, buffer.length - 1);
+  }
+  return buffer;
 }
 
 function parseHeaders(rawHeaders) {
