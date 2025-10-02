@@ -135,6 +135,37 @@ header h1 {
   line-height: 1.6;
 }
 
+.status-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.status-content p {
+  flex: 1;
+  margin: 0;
+}
+
+.status-action {
+  border: none;
+  background: transparent;
+  color: #1d4ed8;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.status-action:hover {
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.status-action:disabled {
+  cursor: not-allowed;
+  color: #94a3b8;
+}
+
 .status.error {
   background: #fee2e2;
   color: #b91c1c;

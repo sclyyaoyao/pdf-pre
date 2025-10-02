@@ -3,6 +3,8 @@ const statusSection = document.getElementById('status');
 const statusMessage = document.getElementById('status-message');
 const submitButton = document.getElementById('submit-btn');
 const cancelButton = document.getElementById('cancel-btn');
+const statusCancelButton = document.getElementById('status-cancel-btn');
+const cancelButtons = [cancelButton, statusCancelButton];
 
 const MAX_SIZE = 20 * 1024 * 1024; // 20MB
 let currentController = null;
@@ -66,13 +68,18 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
-cancelButton.addEventListener('click', () => {
-  if (!currentController) {
+cancelButtons.forEach((button) => {
+  if (!button) {
     return;
   }
-  cancelButton.disabled = true;
-  showStatus('正在取消，请稍候…', false, true);
-  currentController.abort();
+  button.addEventListener('click', () => {
+    if (!currentController) {
+      return;
+    }
+    disableCancelButtons();
+    showStatus('正在取消，请稍候…', false, true);
+    currentController.abort();
+  });
 });
 
 function showStatus(message, isError = false, isLoading = false) {
@@ -91,9 +98,23 @@ function toggleSubmit(disabled) {
   submitButton.textContent = disabled ? '处理中…' : '开始转换';
 }
 
-function toggleCancel(visible) {
-  cancelButton.hidden = !visible;
-  cancelButton.disabled = !visible;
+function toggleCancel(active) {
+  cancelButtons.forEach((button) => {
+    if (!button) {
+      return;
+    }
+    button.hidden = !active;
+    button.disabled = !active;
+  });
+}
+
+function disableCancelButtons() {
+  cancelButtons.forEach((button) => {
+    if (!button) {
+      return;
+    }
+    button.disabled = true;
+  });
 }
 
 function buildDownloadName(original, format) {

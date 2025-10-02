@@ -42,7 +42,17 @@
       </form>
 
       <section id="status" class="status" hidden>
-        <p id="status-message"></p>
+        <div class="status-content">
+          <p id="status-message"></p>
+          <button
+            type="button"
+            class="status-action"
+            id="status-cancel-btn"
+            hidden
+          >
+            取消任务
+          </button>
+        </div>
       </section>
     </main>
     <script type="module" src="/app.js"></script>
