@@ -1,0 +1,49 @@
+# PDF Conversion Feature Requirements
+
+## Overview
+A lightweight interface and backend service that converts user-provided PDF files into plain text (`.txt`), Markdown (`.md`), or comma-separated values (`.csv`) while optionally removing unnecessary line breaks.
+
+## Goals
+- Enable non-technical users to convert PDFs through a simple web UI.
+- Provide consistent conversion outputs across multiple text-based formats.
+- Preserve readable text structure even when removing redundant line breaks.
+
+## Scope
+- Single PDF upload per conversion request.
+- Synchronous conversion triggered from the UI with immediate result download.
+- Conversion leverages existing open-source parsing libraries where possible.
+
+## Out of Scope
+- Batch or multi-file uploads.
+- OCR for scanned PDFs (assumes machine-readable text).
+- Long-term storage of uploaded PDFs or converted outputs beyond the user session.
+
+## User Stories
+1. As a user, I can upload a PDF and choose `.txt`, `.md`, or `.csv` as the output format so I can reuse the content elsewhere.
+2. As a user, I can toggle removal of unnecessary line breaks to get a cleaner output when the PDF contains hard-wrapped text.
+3. As a user, I receive immediate feedback if the conversion fails so I know how to proceed.
+
+## Functional Requirements
+1. UI provides file picker restricted to `.pdf` and displays the selected file name and size.
+2. UI offers mutually exclusive format options for `txt`, `md`, and `csv` with `txt` as the default selection.
+3. UI includes a checkbox labeled "Remove unnecessary line breaks" (unchecked by default).
+4. UI triggers a backend call on submission and displays loading / success / error states.
+5. Backend accepts multipart form data (`file`, `format`, `normalizeLineBreaks`) via POST.
+6. Backend performs PDF-to-text extraction, converts text into the chosen format, applies line-break normalization when requested, and returns the file as a downloadable response with appropriate headers.
+7. UI automatically downloads the converted file and surfaces failures with actionable messaging.
+
+## Non-Functional Requirements
+- Handle PDFs up to 20 MB without timing out under normal server capacity.
+- Conversion completes within 10 seconds for a 50-page PDF on reference hardware.
+- Tokenize line break removal to avoid collapsing paragraphs or table rows.
+- Follow security best practices: validate MIME type, limit file size, and sanitize outputs.
+
+## Dependencies & Constraints
+- Use a Node.js-compatible PDF parsing library (e.g., `pdf-parse` or `pdf-lib`).
+- Keep the solution serverless-friendly (stateless functions, temporary storage only).
+- Ensure the frontend integrates with the existing project build tooling.
+
+## Success Metrics
+- Conversion success rate ≥ 98% for machine-readable PDFs.
+- Frontend Lighthouse accessibility score ≥ 90 on the conversion page.
+- Zero critical errors reported in logs over 1 week of pilot usage.
