@@ -1,1 +1,58 @@
-# pdf-pre
+# PDF 转换工具
+
+一个无需外部依赖的轻量级 PDF 转换示例项目，提供网页界面上传 PDF 并即时转换为 TXT、Markdown 或 CSV，并可选移除 PDF 中的软换行。
+
+## 功能亮点
+- 单文件上传，大小限制 20MB。
+- 三种输出格式：`.txt` / `.md` / `.csv`。
+- 可选的换行清理，保持段落可读性。
+- 转换结果自动触发下载，错误信息即时反馈。
+- 后端使用 Node.js 原生模块实现，易于迁移至 serverless 环境。
+
+## 快速开始
+1. 安装 Node.js 18 或更高版本。
+2. 在项目根目录执行：
+   ```bash
+   npm install # 本项目无外部依赖，但可用于锁定版本信息
+   npm start
+   ```
+   > ⚠️ 如果 macOS 或 Windows 上的 `npm start` 报出 `uv_cwd` / `EPERM` 错误，这是 Node.js 22 自带 npm 的已知问题。可以直接运行仓库内的辅助脚本，效果和 `npm start` 完全一致：
+   > ```bash
+   > ./scripts/start.sh
+   > ```
+   > Windows PowerShell / CMD 可执行：
+   > ```powershell
+   > scripts\start.bat
+   > ```
+   > 脚本会自动切换到项目根目录并执行 `node src/server.js`，无需依赖 npm。
+3. 浏览器访问 `http://localhost:5002`，按界面提示操作。
+
+> 若运行环境无法联网安装依赖，可直接执行 `npm start`，项目仅依赖 Node.js 原生模块。
+
+## 测试
+项目使用自定义脚本运行单元测试：
+```bash
+npm test
+```
+测试覆盖：
+- PDF 文本抽取（示例文件）。
+- 换行整理逻辑。
+- Markdown/CSV 格式化输出。
+
+## 目录结构
+```
+├── docs/design.md          # 技术方案与 API 说明
+├── docs/troubleshooting.md # 常见启动/运行问题
+├── public/                 # 前端静态资源
+├── src/                    # 后端源码
+│   ├── server.js
+│   └── utils/
+├── tests/                  # 自定义测试脚本与样例 PDF
+├── requirement.txt         # 产品需求
+└── task.txt                # 任务拆解
+```
+
+## 已知限制
+- 内置的 PDF 解析逻辑仅适用于常见文本类 PDF，对复杂排版、扫描件或加密文件支持有限。
+- CSV 输出采用单列段落形式，若需结构化表格可在后续迭代拓展。
+- 当前未集成自动化可访问性检测，可在上线前补充相应工具。
