@@ -76,7 +76,13 @@ server.listen(PORT, () => {
 
 async function handleGet(req, res, pathname) {
   const targetPath = pathname === '/' ? 'index.html' : pathname;
-  let filePath = path.join(PUBLIC_DIR, targetPath);
+  const normalizedTarget = sanitizePublicPath(targetPath);
+  if (normalizedTarget === null) {
+    res.writeHead(403, { 'Content-Type': 'application/json', ...defaultCorsHeaders() });
+    res.end(JSON.stringify({ error: 'Forbidden' }));
+    return;
+  }
+  let filePath = path.join(PUBLIC_DIR, normalizedTarget);
   if (!filePath.startsWith(PUBLIC_DIR)) {
     res.writeHead(403, { 'Content-Type': 'application/json', ...defaultCorsHeaders() });
     res.end(JSON.stringify({ error: 'Forbidden' }));
@@ -106,6 +112,18 @@ async function handleGet(req, res, pathname) {
     res.writeHead(404, { 'Content-Type': 'application/json', ...defaultCorsHeaders() });
     res.end(JSON.stringify({ error: 'File not found' }));
   }
+}
+
+function sanitizePublicPath(rawPath) {
+  const withoutLeadingSlash = rawPath.startsWith('/') ? rawPath.slice(1) : rawPath;
+  const normalized = path.normalize(withoutLeadingSlash);
+  if (normalized === '' || normalized === '.') {
+    return 'index.html';
+  }
+  if (normalized.startsWith('..') || path.isAbsolute(normalized)) {
+    return null;
+  }
+  return normalized;
 }
 
 async function handleConvert(req, res) {
