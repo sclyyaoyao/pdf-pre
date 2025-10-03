@@ -19,98 +19,117 @@ const MIME_TYPES = {
   '.js': 'application/javascript; charset=utf-8',
 };
 
-const server = http.createServer(async (req, res) => {
-  let pathname = null;
-  try {
-    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    pathname = url.pathname;
-  } catch (error) {
-    console.error('无法解析请求 URL', error);
-    res.writeHead(400, { 'Content-Type': 'application/json', ...defaultCorsHeaders() });
-    res.end(JSON.stringify({ error: 'Invalid request URL' }));
+export function createServer() {
+  const server = http.createServer(async (req, res) => {
+    let pathname = null;
+    try {
+      const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+      pathname = url.pathname;
+    } catch (error) {
+      console.error('无法解析请求 URL', error);
+      const body = JSON.stringify({ error: 'Invalid request URL' });
+      const length = Buffer.byteLength(body, 'utf-8');
+      res.writeHead(400, jsonHeaders(length));
+      res.end(body);
+      return;
+    }
+
+    try {
+      if (req.method === 'OPTIONS' && isConvertPath(pathname)) {
+        res.writeHead(204, defaultCorsHeaders());
+        res.end();
+        return;
+      }
+
+      if (req.method === 'POST' && isConvertPath(pathname)) {
+        await handleConvert(req, res);
+        return;
+      }
+
+      if (req.method === 'GET' || req.method === 'HEAD') {
+        await handleStatic(req, res, pathname);
+        return;
+      }
+
+      const body = JSON.stringify({ error: 'Not found' });
+      const length = Buffer.byteLength(body, 'utf-8');
+      res.writeHead(404, jsonHeaders(length));
+      res.end(body);
+    } catch (error) {
+      console.error(error);
+      if (!res.headersSent) {
+        const body = JSON.stringify({ error: 'Internal server error' });
+        const length = Buffer.byteLength(body, 'utf-8');
+        res.writeHead(500, jsonHeaders(length));
+        res.end(body);
+      } else {
+        res.end();
+      }
+    }
+  });
+
+  server.on('clientError', (error, socket) => {
+    console.error('Client error', error);
+    if (socket.writable) {
+      const body = JSON.stringify({ error: 'Malformed request' });
+      socket.end(
+        `HTTP/1.1 400 Bad Request\r\nContent-Type: application/json; charset=utf-8\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET,POST,OPTIONS,HEAD\r\nAccess-Control-Allow-Headers: Content-Type, Accept\r\nContent-Length: ${Buffer.byteLength(
+          body,
+          'utf-8',
+        )}\r\nConnection: close\r\n\r\n${body}`,
+      );
+    } else {
+      socket.destroy();
+    }
+  });
+
+  return server;
+}
+
+async function handleStatic(req, res, pathname) {
+  if (isConvertPath(pathname)) {
+    const body = JSON.stringify({ error: 'Not found' });
+    const length = Buffer.byteLength(body, 'utf-8');
+    res.writeHead(404, jsonHeaders(length));
+    res.end(body);
     return;
   }
-  try {
-    if (req.method === 'GET') {
-      await handleGet(req, res, pathname);
-      return;
-    }
-    if (req.method === 'POST' && isConvertPath(pathname)) {
-      await handleConvert(req, res);
-      return;
-    }
-    if (req.method === 'OPTIONS' && isConvertPath(pathname)) {
-      res.writeHead(204, defaultCorsHeaders());
-      res.end();
-      return;
-    }
-    res.writeHead(404, { 'Content-Type': 'application/json', ...defaultCorsHeaders() });
-    res.end(JSON.stringify({ error: 'Not found' }));
-  } catch (error) {
-    console.error(error);
-    if (!res.headersSent) {
-      res.writeHead(500, { 'Content-Type': 'application/json', ...defaultCorsHeaders() });
-    }
-    res.end(JSON.stringify({ error: 'Internal server error' }));
-  }
-});
 
-server.on('clientError', (error, socket) => {
-  console.error('Client error', error);
-  if (socket.writable) {
-    const body = JSON.stringify({ error: 'Malformed request' });
-    socket.end(
-      `HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ${Buffer.byteLength(
-        body,
-        'utf-8',
-      )}\r\nConnection: close\r\n\r\n${body}`,
-    );
-  } else {
-    socket.destroy();
-  }
-});
-
-server.listen(PORT, () => {
-  console.log(`Server listening on http://localhost:${PORT}`);
-});
-
-async function handleGet(req, res, pathname) {
   const targetPath = pathname === '/' ? 'index.html' : pathname;
   const normalizedTarget = sanitizePublicPath(targetPath);
   if (normalizedTarget === null) {
-    res.writeHead(403, { 'Content-Type': 'application/json', ...defaultCorsHeaders() });
-    res.end(JSON.stringify({ error: 'Forbidden' }));
+    const body = JSON.stringify({ error: 'Forbidden' });
+    const length = Buffer.byteLength(body, 'utf-8');
+    res.writeHead(403, jsonHeaders(length));
+    res.end(body);
     return;
   }
-  let filePath = path.join(PUBLIC_DIR, normalizedTarget);
+  const filePath = path.resolve(PUBLIC_DIR, normalizedTarget);
   if (!filePath.startsWith(PUBLIC_DIR)) {
-    res.writeHead(403, { 'Content-Type': 'application/json', ...defaultCorsHeaders() });
-    res.end(JSON.stringify({ error: 'Forbidden' }));
+    const body = JSON.stringify({ error: 'Forbidden' });
+    const length = Buffer.byteLength(body, 'utf-8');
+    res.writeHead(403, jsonHeaders(length));
+    res.end(body);
     return;
   }
   const ext = path.extname(filePath);
   try {
     const content = await readFile(filePath);
-    const headers = {
-      'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
-      ...defaultCorsHeaders(),
-    };
-    res.writeHead(200, headers);
-    res.end(content);
+    sendStatic(res, content, MIME_TYPES[ext] || 'application/octet-stream', req.method);
   } catch (error) {
     if (ext === '') {
       try {
-        filePath = `${filePath}.html`;
-        const fallback = await readFile(filePath);
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', ...defaultCorsHeaders() });
-        res.end(fallback);
+        const fallback = await readFile(`${filePath}.html`);
+        sendStatic(res, fallback, 'text/html; charset=utf-8', req.method);
         return;
       } catch (innerError) {
         console.error(innerError);
       }
     }
-    res.writeHead(404, { 'Content-Type': 'application/json', ...defaultCorsHeaders() });
-    res.end(JSON.stringify({ error: 'File not found' }));
+    const body = JSON.stringify({ error: 'File not found' });
+    const length = Buffer.byteLength(body, 'utf-8');
+    res.writeHead(404, jsonHeaders(length));
+    res.end(body);
   }
 }
 
@@ -147,8 +166,10 @@ async function handleConvert(req, res) {
     res.end(output, 'utf-8');
   } catch (error) {
     console.error(error);
-    res.writeHead(400, { 'Content-Type': 'application/json', ...defaultCorsHeaders() });
-    res.end(JSON.stringify({ error: error.message || 'Conversion failed' }));
+    const body = JSON.stringify({ error: error.message || 'Conversion failed' });
+    const length = Buffer.byteLength(body, 'utf-8');
+    res.writeHead(400, jsonHeaders(length));
+    res.end(body);
   }
 }
 
@@ -178,8 +199,8 @@ function mimeForFormat(format) {
 function defaultCorsHeaders() {
   return {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS,HEAD',
+    'Access-Control-Allow-Headers': 'Content-Type, Accept',
   };
 }
 
@@ -190,4 +211,35 @@ function isConvertPath(pathname) {
     return pathname.slice(0, -1) === '/api/convert';
   }
   return false;
+}
+
+function sendStatic(res, content, contentType, method = 'GET') {
+  const headers = {
+    ...defaultCorsHeaders(),
+    'Content-Type': contentType,
+    'Content-Length': content.length,
+  };
+  res.writeHead(200, headers);
+  if (method === 'HEAD') {
+    res.end();
+    return;
+  }
+  res.end(content);
+}
+
+function jsonHeaders(length) {
+  return {
+    ...defaultCorsHeaders(),
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Length': length,
+  };
+}
+
+const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === __filename;
+
+if (isDirectRun) {
+  const server = createServer();
+  server.listen(PORT, () => {
+    console.log(`Server listening on http://localhost:${PORT}`);
+  });
 }

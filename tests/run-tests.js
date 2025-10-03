@@ -8,6 +8,7 @@ import { normalizeLineBreaks } from '../src/utils/lineBreaks.js';
 import { formatContent } from '../src/utils/formatters.js';
 import { extractTextFromPdf } from '../src/utils/pdfExtractor.js';
 import { parseMultipartRequest } from '../src/utils/multipart.js';
+import { createServer } from '../src/server.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -92,6 +93,53 @@ test('parseMultipartRequest 支持带引号的 boundary', async () => {
   const { file } = await parseMultipartRequest(req);
   assert.equal(file.size, pdfBuffer.length);
   assert.equal(file.originalName, 'simple.pdf');
+});
+
+test('HTTP 服务支持静态资源访问和转换接口', async () => {
+  const server = createServer();
+  await new Promise((resolve) => server.listen(0, resolve));
+  const address = server.address();
+  const port = typeof address === 'object' && address ? address.port : 0;
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  try {
+    const headResponse = await fetch(`${baseUrl}/styles.css`, { method: 'HEAD' });
+    assert.equal(headResponse.status, 200);
+    assert.equal(headResponse.headers.get('content-type'), 'text/css; charset=utf-8');
+
+    const pageResponse = await fetch(`${baseUrl}/`);
+    assert.equal(pageResponse.status, 200);
+    const html = await pageResponse.text();
+    assert(html.includes('PDF 文本转换'));
+
+    const pdfPath = path.join(__dirname, 'fixtures', 'simple.pdf');
+    const pdfBuffer = await readFile(pdfPath);
+    const pdfBlob = new Blob([pdfBuffer], { type: 'application/pdf' });
+    const formData = new FormData();
+    formData.set('file', pdfBlob, 'simple.pdf');
+    formData.set('format', 'txt');
+    formData.set('normalizeLineBreaks', 'true');
+
+    const convertResponse = await fetch(`${baseUrl}/api/convert`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    assert.equal(convertResponse.status, 200);
+    assert.equal(convertResponse.headers.get('content-type'), 'text/plain; charset=utf-8');
+    const text = await convertResponse.text();
+    assert(text.includes('Hello PDF World'));
+  } finally {
+    await new Promise((resolve, reject) =>
+      server.close((error) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve();
+        }
+      }),
+    );
+  }
 });
 
 let passed = 0;
